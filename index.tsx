@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Map, Activity, AlertTriangle, Battery, Navigation, Code, X, Flag, Plus, Trash2, Edit2, CheckCircle, Save, User, Key, Radio, Siren } from 'lucide-react';
+import { Map, Activity, AlertTriangle, Battery, Navigation, Code, X, Flag, Plus, Trash2, Edit2, CheckCircle, Save, User, Key, Radio, Siren, MapPin } from 'lucide-react';
 
 // --- Types ---
 interface Location {
@@ -421,6 +421,22 @@ const CheckpointEditor = ({
         </div>
 
         <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          {/* Location Display */}
+          <div style={{ padding: '12px', backgroundColor: '#F3F4F6', borderRadius: '8px', display: 'flex', gap: '16px' }}>
+             <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#6B7280', marginBottom: '2px' }}>LATITUDE</label>
+                <div style={{ fontSize: '13px', fontFamily: 'monospace', color: '#111827' }}>{formData.location?.lat.toFixed(6)}</div>
+             </div>
+             <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#6B7280', marginBottom: '2px' }}>LONGITUDE</label>
+                <div style={{ fontSize: '13px', fontFamily: 'monospace', color: '#111827' }}>{formData.location?.lng.toFixed(6)}</div>
+             </div>
+             <div style={{ display: 'flex', alignItems: 'center', color: '#059669', fontSize: '12px', fontWeight: 500, gap: '4px' }}>
+                <CheckCircle size={14} /> Localização Definida
+             </div>
+          </div>
+
           <div>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Título</label>
             <input 
@@ -536,220 +552,29 @@ const CheckpointEditor = ({
   );
 };
 
-// --- Team Editor Component ---
-const TeamEditor = ({ 
-  team, 
-  onSave, 
-  onCancel, 
-  onDelete 
-}: { 
-  team: Partial<Team>, 
-  onSave: (t: Team) => void, 
-  onCancel: () => void,
-  onDelete?: (id: string) => void
-}) => {
-  const [formData, setFormData] = useState<Partial<Team>>({
-    ...team,
-    mode: team.mode || 'tracking_only',
-    status: team.status || 'offline'
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name || !formData.username || !formData.password) return;
-    
-    // Fill in required mocks if new
-    const finalData: any = { ...formData };
-    if(!finalData.location) {
-        finalData.location = { lat: 38.7223, lng: -9.1393, timestamp: new Date().toISOString() };
-    }
-    if(finalData.batteryLevel === undefined) finalData.batteryLevel = 100;
-
-    onSave(finalData as Team);
-  };
-
-  return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000,
-      display: 'flex', justifyContent: 'center', alignItems: 'center'
-    }}>
-      <div style={{
-        backgroundColor: 'white', width: '450px', maxWidth: '95%',
-        borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
-      }}>
-        <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, color: '#111827', fontWeight: 600 }}>
-            {formData.id ? 'Editar Equipa' : 'Nova Equipa'}
-          </h3>
-          <button onClick={onCancel} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#6b7280' }}><X size={20}/></button>
-        </div>
-
-        <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          
-          {/* Nome da Equipa */}
-          <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Nome da Equipa</label>
-            <div style={{ position: 'relative' }}>
-                <input 
-                type="text" 
-                required
-                value={formData.name || ''}
-                onChange={e => setFormData({...formData, name: e.target.value})}
-                style={{ width: '100%', padding: '8px 12px 8px 36px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
-                placeholder="Ex: Lobo Guará"
-                />
-                <Flag size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            {/* Username */}
-            <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Username (Login)</label>
-                <div style={{ position: 'relative' }}>
-                    <input 
-                    type="text" 
-                    required
-                    value={formData.username || ''}
-                    onChange={e => setFormData({...formData, username: e.target.value})}
-                    style={{ width: '100%', padding: '8px 12px 8px 36px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
-                    placeholder="user1"
-                    />
-                    <User size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
-                </div>
-            </div>
-             {/* Password */}
-             <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Password</label>
-                <div style={{ position: 'relative' }}>
-                    <input 
-                    type="text" 
-                    required
-                    value={formData.password || ''}
-                    onChange={e => setFormData({...formData, password: e.target.value})}
-                    style={{ width: '100%', padding: '8px 12px 8px 36px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
-                    placeholder="***"
-                    />
-                    <Key size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
-                </div>
-            </div>
-          </div>
-
-          {/* Mode Switch */}
-          <div style={{ marginTop: '8px' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '8px' }}>Modo de Funcionamento</label>
-            <div style={{ display: 'flex', gap: '12px' }}>
-                <label style={{ flex: 1, cursor: 'pointer' }}>
-                    <input 
-                        type="radio" 
-                        name="mode" 
-                        value="tracking_only"
-                        checked={formData.mode === 'tracking_only'}
-                        onChange={() => setFormData({...formData, mode: 'tracking_only'})}
-                        style={{ display: 'none' }}
-                    />
-                    <div style={{ 
-                        padding: '12px', borderRadius: '8px', border: `1px solid ${formData.mode === 'tracking_only' ? '#3B82F6' : '#E5E7EB'}`,
-                        backgroundColor: formData.mode === 'tracking_only' ? '#EFF6FF' : 'white',
-                        textAlign: 'center', transition: 'all 0.2s'
-                    }}>
-                        <div style={{ fontWeight: 600, fontSize: '13px', color: formData.mode === 'tracking_only' ? '#1E40AF' : '#374151' }}>Rastreio</div>
-                        <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>Só GPS</div>
-                    </div>
-                </label>
-                <label style={{ flex: 1, cursor: 'pointer' }}>
-                    <input 
-                        type="radio" 
-                        name="mode" 
-                        value="activity"
-                        checked={formData.mode === 'activity'}
-                        onChange={() => setFormData({...formData, mode: 'activity'})}
-                        style={{ display: 'none' }}
-                    />
-                    <div style={{ 
-                        padding: '12px', borderRadius: '8px', border: `1px solid ${formData.mode === 'activity' ? '#10B981' : '#E5E7EB'}`,
-                        backgroundColor: formData.mode === 'activity' ? '#ECFDF5' : 'white',
-                        textAlign: 'center', transition: 'all 0.2s'
-                    }}>
-                        <div style={{ fontWeight: 600, fontSize: '13px', color: formData.mode === 'activity' ? '#047857' : '#374151' }}>Atividade</div>
-                        <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>Com Checkpoints</div>
-                    </div>
-                </label>
-            </div>
-          </div>
-
-          {/* Status Override (Admin Only) */}
-          <div style={{ marginTop: '8px' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '8px' }}>Estado (Admin Force)</label>
-            <select
-                value={formData.status}
-                onChange={e => setFormData({...formData, status: e.target.value as any})}
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', backgroundColor: '#F9FAFB' }}
-            >
-                <option value="online">Online</option>
-                <option value="offline">Offline</option>
-                <option value="sos">SOS (Emergência)</option>
-            </select>
-            <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '4px' }}>
-                Atenção: Mudar para SOS irá disparar alertas sonoros para todos os administradores.
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
-            {formData.id && onDelete && (
-              <button 
-                type="button" 
-                onClick={() => onDelete(formData.id!)}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', color: '#EF4444', border: '1px solid #FECACA', borderRadius: '6px', background: '#FEF2F2', cursor: 'pointer' }}
-              >
-                <Trash2 size={16} /> Eliminar
-              </button>
-            )}
-            {!formData.id && <div />} {/* Spacer */}
-            
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button 
-                type="button" 
-                onClick={onCancel}
-                style={{ padding: '8px 16px', color: '#374151', border: '1px solid #d1d5db', borderRadius: '6px', background: 'white', cursor: 'pointer' }}
-              >
-                Cancelar
-              </button>
-              <button 
-                type="submit"
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 24px', color: 'white', border: 'none', borderRadius: '6px', background: '#2563EB', cursor: 'pointer', fontWeight: 500 }}
-              >
-                <Save size={16} /> Guardar
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
 // Simple Mock Map Component for the Web Preview
 const MockMap = ({ 
   teams, 
   checkpoints, 
   activeTab,
   onMapClick,
-  onCheckpointClick 
+  onCheckpointClick,
+  editingCheckpoint
 }: { 
   teams: Team[], 
   checkpoints: Checkpoint[], 
   activeTab: 'teams' | 'checkpoints',
   onMapClick: (lat: number, lng: number) => void,
-  onCheckpointClick: (cp: Checkpoint) => void
+  onCheckpointClick: (cp: Checkpoint) => void,
+  editingCheckpoint: Partial<Checkpoint> | null
 }) => {
   // Center roughly on mock data
   const centerLat = 38.7223;
   const centerLng = -9.1393;
   const zoomScale = 12000; 
   
+  const [hoveredCpId, setHoveredCpId] = useState<string | null>(null);
+
   const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
      if (activeTab !== 'checkpoints') return;
      
@@ -777,6 +602,7 @@ const MockMap = ({
         backgroundBlendMode: 'overlay', // Blend with gray if image fails (no key)
         backgroundSize: 'cover, 20px 20px'
       }}
+      title={activeTab === 'checkpoints' ? "Clique no mapa para adicionar um Checkpoint" : ""}
     >
       {/* Fallback Grid if no API Key image */}
       <div style={{ position: 'absolute', inset: 0, opacity: 0.1, pointerEvents: 'none', backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
@@ -838,39 +664,77 @@ const MockMap = ({
       {checkpoints.map(cp => {
         const y = 50 + (centerLat - cp.location.lat) * zoomScale;
         const x = 50 + (cp.location.lng - centerLng) * zoomScale;
+        const isEditing = editingCheckpoint?.id === cp.id;
 
         return (
            <div 
              key={cp.id}
-             onClick={(e) => { e.stopPropagation(); onCheckpointClick(cp); }}
+             onClick={(e) => { 
+                e.stopPropagation(); 
+                if (activeTab === 'checkpoints') onCheckpointClick(cp); 
+             }}
+             onMouseEnter={() => setHoveredCpId(cp.id)}
+             onMouseLeave={() => setHoveredCpId(null)}
+             title={cp.title}
              style={{
                position: 'absolute',
                top: `calc(50% + ${y}%)`,
                left: `calc(50% + ${x}%)`,
-               transform: 'translate(-50%, -100%)', // Anchor at bottom center
-               cursor: 'pointer',
-               zIndex: 20
+               transform: `translate(-50%, -100%) scale(${hoveredCpId === cp.id || isEditing ? 1.2 : 1})`,
+               cursor: activeTab === 'checkpoints' ? 'pointer' : 'default',
+               zIndex: hoveredCpId === cp.id || isEditing ? 30 : 20,
+               transition: 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
              }}
            >
              <div style={{ 
-                backgroundColor: '#F59E0B', color: 'white', borderRadius: '50%', 
+                backgroundColor: isEditing ? '#3B82F6' : '#F59E0B', 
+                color: 'white', borderRadius: '50%', 
                 width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.2)', border: '2px solid white'
+                boxShadow: isEditing ? '0 0 0 4px rgba(59, 130, 246, 0.3)' : '0 4px 6px -1px rgba(0,0,0,0.2)', 
+                border: '2px solid white'
              }}>
                 <Flag size={16} fill="white" />
              </div>
              {/* Simple radius visualizer */}
-             {activeTab === 'checkpoints' && (
+             {(activeTab === 'checkpoints' || isEditing) && (
                <div style={{
                  position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
                  width: '80px', height: '80px', borderRadius: '50%',
-                 backgroundColor: 'rgba(245, 158, 11, 0.2)', border: '1px dashed #F59E0B',
+                 backgroundColor: isEditing ? 'rgba(59, 130, 246, 0.1)' : 'rgba(245, 158, 11, 0.2)', 
+                 border: `1px dashed ${isEditing ? '#3B82F6' : '#F59E0B'}`,
                  pointerEvents: 'none', zIndex: -1
                }} />
              )}
            </div>
         );
       })}
+
+      {/* Render "Ghost" New Checkpoint Marker */}
+      {editingCheckpoint && !editingCheckpoint.id && editingCheckpoint.location && (
+         <div style={{
+            position: 'absolute',
+            top: `calc(50% + ${50 + (centerLat - editingCheckpoint.location.lat) * zoomScale}%)`,
+            left: `calc(50% + ${50 + (editingCheckpoint.location.lng - centerLng) * zoomScale}%)`,
+            transform: 'translate(-50%, -100%)',
+            zIndex: 40,
+            pointerEvents: 'none'
+         }}>
+             <div style={{ 
+                backgroundColor: '#3B82F6', color: 'white', borderRadius: '50%', 
+                width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.2)', border: '2px solid white',
+                animation: 'bounce 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+             }}>
+                <Plus size={20} />
+             </div>
+             <div style={{
+                 position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                 width: '80px', height: '80px', borderRadius: '50%',
+                 backgroundColor: 'rgba(59, 130, 246, 0.2)', border: '1px dashed #3B82F6',
+                 pointerEvents: 'none', zIndex: -1
+             }} />
+         </div>
+      )}
       
       <style>{`
         @keyframes pulse {
@@ -880,6 +744,11 @@ const MockMap = ({
         @keyframes flashBanner {
            0%, 100% { background-color: #EF4444; }
            50% { background-color: #B91C1C; }
+        }
+        @keyframes bounce {
+            0% { transform: scale(0); opacity: 0; }
+            80% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); }
         }
       `}</style>
     </div>
@@ -1129,6 +998,7 @@ const App = () => {
            activeTab={activeTab}
            onMapClick={handleMapClick}
            onCheckpointClick={setEditingCheckpoint}
+           editingCheckpoint={editingCheckpoint}
         />
         
         {/* Overlay Stats - Only show in Teams mode */}

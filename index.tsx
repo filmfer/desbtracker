@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Map, Activity, AlertTriangle, Battery, Navigation, Code, X, Flag, Plus, Trash2, Edit2, CheckCircle, Save, User, Key, Radio, Siren, MapPin } from 'lucide-react';
+import { Map, Activity, AlertTriangle, Battery, Navigation, Code, X, Flag, Plus, Trash2, Edit2, CheckCircle, Save, User, Key, Radio, Siren, MapPin, Shield } from 'lucide-react';
 
 // --- Types ---
 interface Location {
@@ -31,6 +31,13 @@ interface Checkpoint {
   radius: number;
 }
 
+interface Admin {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'super_admin';
+}
+
 interface ToastNotification {
   id: string;
   title: string;
@@ -43,6 +50,11 @@ let GLOBAL_TEAMS_DB: Team[] = [
   { id: 't1', name: 'Lobo Guará', username: 'team1', password: '123', status: 'online', mode: 'activity', location: { lat: 38.7223, lng: -9.1393, timestamp: new Date().toISOString() }, batteryLevel: 85 },
   { id: 't2', name: 'Águia Real', username: 'team2', password: '123', status: 'offline', mode: 'tracking_only', location: { lat: 38.7240, lng: -9.1420, timestamp: new Date().toISOString() }, batteryLevel: 42 },
   { id: 't3', name: 'Raposa Astuta', username: 'team3', password: '123', status: 'sos', mode: 'activity', location: { lat: 38.7210, lng: -9.1350, timestamp: new Date().toISOString() }, batteryLevel: 15 },
+];
+
+let GLOBAL_ADMINS_DB: Admin[] = [
+  { id: 'a1', name: 'Chefe Silva', email: 'silva@scouttracker.com', role: 'super_admin' },
+  { id: 'a2', name: 'Chefe Maria', email: 'maria@scouttracker.com', role: 'admin' }
 ];
 
 const MOCK_CHECKPOINTS: Checkpoint[] = [
@@ -552,6 +564,254 @@ const CheckpointEditor = ({
   );
 };
 
+// --- Team Editor Component ---
+const TeamEditor = ({ 
+  team, 
+  onSave, 
+  onCancel, 
+  onDelete 
+}: { 
+  team: Partial<Team>, 
+  onSave: (team: Team) => void, 
+  onCancel: () => void,
+  onDelete?: (id: string) => void
+}) => {
+  const [formData, setFormData] = useState<Partial<Team>>(team);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData.username || !formData.password) return;
+    onSave(formData as Team);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000,
+      display: 'flex', justifyContent: 'center', alignItems: 'center'
+    }}>
+      <div style={{
+        backgroundColor: 'white', width: '500px', maxWidth: '95%',
+        borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+      }}>
+        <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, color: '#111827', fontWeight: 600 }}>
+            {formData.id ? 'Editar Equipa' : 'Nova Equipa'}
+          </h3>
+          <button onClick={onCancel} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#6b7280' }}><X size={20}/></button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Nome da Equipa</label>
+            <input 
+              type="text" 
+              required
+              value={formData.name || ''}
+              onChange={e => setFormData({...formData, name: e.target.value})}
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
+              placeholder="Ex: Lobo Guará"
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Username</label>
+                <input 
+                  type="text" 
+                  required
+                  value={formData.username || ''}
+                  onChange={e => setFormData({...formData, username: e.target.value})}
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
+                  placeholder="team1"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Password</label>
+                <input 
+                  type="text" 
+                  required
+                  value={formData.password || ''}
+                  onChange={e => setFormData({...formData, password: e.target.value})}
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
+                  placeholder="***"
+                />
+              </div>
+          </div>
+
+          <div>
+             <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Modo de Operação</label>
+             <select 
+               value={formData.mode || 'tracking_only'}
+               onChange={e => setFormData({...formData, mode: e.target.value as any})}
+               style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
+             >
+               <option value="tracking_only">Apenas Rastreio</option>
+               <option value="activity">Modo Atividade (Jogos)</option>
+             </select>
+          </div>
+
+          {formData.id && (
+              <div>
+                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Status Atual</label>
+                 <select 
+                   value={formData.status || 'offline'}
+                   onChange={e => setFormData({...formData, status: e.target.value as any})}
+                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
+                 >
+                   <option value="offline">Offline</option>
+                   <option value="online">Online</option>
+                   <option value="sos">SOS (Emergência)</option>
+                 </select>
+              </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
+            {formData.id && onDelete && (
+              <button 
+                type="button" 
+                onClick={() => onDelete(formData.id!)}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', color: '#EF4444', border: '1px solid #FECACA', borderRadius: '6px', background: '#FEF2F2', cursor: 'pointer' }}
+              >
+                <Trash2 size={16} /> Eliminar
+              </button>
+            )}
+            {!formData.id && <div />} {/* Spacer */}
+            
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                type="button" 
+                onClick={onCancel}
+                style={{ padding: '8px 16px', color: '#374151', border: '1px solid #d1d5db', borderRadius: '6px', background: 'white', cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                type="submit"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 24px', color: 'white', border: 'none', borderRadius: '6px', background: '#2563EB', cursor: 'pointer', fontWeight: 500 }}
+              >
+                <Save size={16} /> Guardar
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// --- Admin Editor Component ---
+const AdminEditor = ({ 
+  admin, 
+  onSave, 
+  onCancel, 
+  onDelete 
+}: { 
+  admin: Partial<Admin>, 
+  onSave: (admin: Admin) => void, 
+  onCancel: () => void,
+  onDelete?: (id: string) => void
+}) => {
+  const [formData, setFormData] = useState<Partial<Admin>>(admin);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData.email) return;
+    onSave(formData as Admin);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000,
+      display: 'flex', justifyContent: 'center', alignItems: 'center'
+    }}>
+      <div style={{
+        backgroundColor: 'white', width: '500px', maxWidth: '95%',
+        borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+      }}>
+        <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, color: '#111827', fontWeight: 600 }}>
+            {formData.id ? 'Editar Chefe' : 'Novo Chefe'}
+          </h3>
+          <button onClick={onCancel} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#6b7280' }}><X size={20}/></button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Nome</label>
+            <input 
+              type="text" 
+              required
+              value={formData.name || ''}
+              onChange={e => setFormData({...formData, name: e.target.value})}
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
+              placeholder="Ex: Chefe Silva"
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Email</label>
+            <input 
+              type="email" 
+              required
+              value={formData.email || ''}
+              onChange={e => setFormData({...formData, email: e.target.value})}
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
+              placeholder="exemplo@scouttracker.com"
+            />
+          </div>
+
+          <div>
+             <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Permissões</label>
+             <select 
+               value={formData.role || 'admin'}
+               onChange={e => setFormData({...formData, role: e.target.value as any})}
+               style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
+             >
+               <option value="admin">Administrador (Normal)</option>
+               <option value="super_admin">Super Administrador (Total)</option>
+             </select>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
+            {formData.id && onDelete && (
+              <button 
+                type="button" 
+                onClick={() => onDelete(formData.id!)}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', color: '#EF4444', border: '1px solid #FECACA', borderRadius: '6px', background: '#FEF2F2', cursor: 'pointer' }}
+              >
+                <Trash2 size={16} /> Eliminar
+              </button>
+            )}
+            {!formData.id && <div />} {/* Spacer */}
+            
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                type="button" 
+                onClick={onCancel}
+                style={{ padding: '8px 16px', color: '#374151', border: '1px solid #d1d5db', borderRadius: '6px', background: 'white', cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                type="submit"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 24px', color: 'white', border: 'none', borderRadius: '6px', background: '#2563EB', cursor: 'pointer', fontWeight: 500 }}
+              >
+                <Save size={16} /> Guardar
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 // Simple Mock Map Component for the Web Preview
 const MockMap = ({ 
   teams, 
@@ -563,7 +823,7 @@ const MockMap = ({
 }: { 
   teams: Team[], 
   checkpoints: Checkpoint[], 
-  activeTab: 'teams' | 'checkpoints',
+  activeTab: 'teams' | 'checkpoints' | 'admins',
   onMapClick: (lat: number, lng: number) => void,
   onCheckpointClick: (cp: Checkpoint) => void,
   editingCheckpoint: Partial<Checkpoint> | null
@@ -609,12 +869,12 @@ const MockMap = ({
 
       <div style={{ position: 'absolute', top: '20px', left: '20px', backgroundColor: 'rgba(255,255,255,0.95)', padding: '12px', borderRadius: '8px', fontSize: '12px', color: '#4b5563', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', maxWidth: '250px', zIndex: 100 }}>
         <p style={{ margin: '0 0 8px 0', fontWeight: 'bold', color: '#111' }}>
-           {activeTab === 'teams' ? 'Monitorização em Tempo Real' : 'Gestão de Checkpoints'}
+           {activeTab === 'teams' ? 'Monitorização em Tempo Real' : activeTab === 'admins' ? 'Gestão de Chefia' : 'Gestão de Checkpoints'}
         </p>
         <p style={{ margin: 0 }}>
            {activeTab === 'teams' 
               ? 'Este mapa simula a atualização em tempo real via Firestore.' 
-              : 'Clique no mapa para adicionar um novo Checkpoint. Clique num checkpoint para editar.'}
+              : activeTab === 'admins' ? 'Modo de gestão administrativa. Mapa apenas para visualização.' : 'Clique no mapa para adicionar um novo Checkpoint. Clique num checkpoint para editar.'}
         </p>
       </div>
 
@@ -760,12 +1020,16 @@ const App = () => {
   const [showCode, setShowCode] = useState(false);
   
   // New State for Checkpoints
-  const [activeTab, setActiveTab] = useState<'teams' | 'checkpoints'>('teams');
+  const [activeTab, setActiveTab] = useState<'teams' | 'checkpoints' | 'admins'>('teams');
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>(MOCK_CHECKPOINTS);
   const [editingCheckpoint, setEditingCheckpoint] = useState<Partial<Checkpoint> | null>(null);
 
   // New State for Team Management
   const [editingTeam, setEditingTeam] = useState<Partial<Team> | null>(null);
+
+  // New State for Admin Management
+  const [admins, setAdmins] = useState<Admin[]>(GLOBAL_ADMINS_DB);
+  const [editingAdmin, setEditingAdmin] = useState<Partial<Admin> | null>(null);
 
   // New State for SOS Notifications
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
@@ -860,6 +1124,33 @@ const App = () => {
       setEditingTeam(null);
   };
 
+  // Admin Actions
+  const saveAdmin = (admin: Admin) => {
+    if (admin.id) {
+        // Edit existing in Mutable DB
+        const index = GLOBAL_ADMINS_DB.findIndex(a => a.id === admin.id);
+        if(index !== -1) {
+            GLOBAL_ADMINS_DB[index] = { ...GLOBAL_ADMINS_DB[index], ...admin };
+        }
+    } else {
+        // Create new
+        const newAdmin: Admin = { 
+            ...admin, 
+            id: `a_${Date.now()}`,
+        };
+        GLOBAL_ADMINS_DB.push(newAdmin);
+    }
+    // Update State to trigger re-render
+    setAdmins([...GLOBAL_ADMINS_DB]);
+    setEditingAdmin(null);
+  };
+
+  const deleteAdmin = (id: string) => {
+      GLOBAL_ADMINS_DB = GLOBAL_ADMINS_DB.filter(a => a.id !== id);
+      setAdmins([...GLOBAL_ADMINS_DB]);
+      setEditingAdmin(null);
+  };
+
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}>
       {/* Sidebar */}
@@ -894,10 +1185,21 @@ const App = () => {
            >
              Checkpoints
            </button>
+           <button 
+             onClick={() => setActiveTab('admins')}
+             style={{ 
+               flex: 1, padding: '12px', border: 'none', background: activeTab === 'admins' ? 'white' : '#F3F4F6',
+               fontWeight: 600, color: activeTab === 'admins' ? '#2563EB' : '#6B7280', cursor: 'pointer',
+               borderBottom: activeTab === 'admins' ? '2px solid #2563EB' : 'none',
+               display: 'flex', alignItems: 'center', justifyContent: 'center'
+             }}
+           >
+             <Shield size={16} />
+           </button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {activeTab === 'teams' ? (
+          {activeTab === 'teams' && (
             <>
               <div style={{ padding: '16px', fontSize: '11px', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>Equipas no Terreno ({teams.length})</span>
@@ -916,7 +1218,9 @@ const App = () => {
                 />
               ))}
             </>
-          ) : (
+          )}
+
+          {activeTab === 'checkpoints' && (
              <>
                <div style={{ padding: '16px', fontSize: '11px', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                  <span>Checkpoints ({checkpoints.length})</span>
@@ -949,6 +1253,49 @@ const App = () => {
                        <div style={{ fontWeight: 600, color: '#1F2937', fontSize: '14px' }}>{cp.title}</div>
                        <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                          {cp.question}
+                       </div>
+                    </div>
+                 </div>
+               ))}
+             </>
+          )}
+
+          {activeTab === 'admins' && (
+             <>
+               <div style={{ padding: '16px', fontSize: '11px', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                 <span>Chefia & Administração ({admins.length})</span>
+                 <button 
+                   onClick={() => setEditingAdmin({ name: '', role: 'admin' })}
+                   style={{ background: 'none', border: 'none', color: '#2563EB', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600 }}
+                 >
+                   <Plus size={14} /> Novo
+                 </button>
+               </div>
+               {admins.map(admin => (
+                 <div 
+                   key={admin.id}
+                   onClick={() => setEditingAdmin(admin)}
+                   style={{
+                     padding: '16px', borderBottom: '1px solid #f3f4f6', cursor: 'pointer',
+                     backgroundColor: 'white', transition: 'background-color 0.2s',
+                     display: 'flex', gap: '12px', alignItems: 'center'
+                   }}
+                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                 >
+                    <div style={{ 
+                        width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#DBEAFE', 
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1E40AF' 
+                    }}>
+                      <User size={18} />
+                    </div>
+                    <div>
+                       <div style={{ fontWeight: 600, color: '#1F2937', fontSize: '14px' }}>{admin.name}</div>
+                       <div style={{ fontSize: '12px', color: '#6B7280', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                         {admin.role === 'super_admin' && <Shield size={12} color="#D97706" />}
+                         <span style={{ color: admin.role === 'super_admin' ? '#D97706' : '#6B7280' }}>
+                           {admin.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                         </span>
                        </div>
                     </div>
                  </div>
@@ -1042,6 +1389,15 @@ const App = () => {
           onSave={saveTeam} 
           onCancel={() => setEditingTeam(null)} 
           onDelete={deleteTeam}
+        />
+      )}
+
+      {editingAdmin && (
+        <AdminEditor 
+          admin={editingAdmin} 
+          onSave={saveAdmin} 
+          onCancel={() => setEditingAdmin(null)} 
+          onDelete={deleteAdmin}
         />
       )}
     </div>

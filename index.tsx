@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Map, Activity, AlertTriangle, Battery, Navigation, Code, X, Flag, Plus, Trash2, Edit2, CheckCircle, Save, User, Key, Radio, Siren, MapPin, Shield } from 'lucide-react';
+import { Map, Activity, AlertTriangle, Battery, Navigation, Code, X, Flag, Plus, Trash2, Edit2, CheckCircle, Save, User, Key, Radio, Siren, MapPin, Shield, Lock, Play, Square, Clock, Timer, Route } from 'lucide-react';
 
 // --- Types ---
 interface Location {
@@ -17,7 +17,10 @@ interface Team {
   status: 'online' | 'offline' | 'sos';
   mode: 'tracking_only' | 'activity';
   location: Location;
+  history: Location[]; // Historical breadcrumbs
   batteryLevel: number;
+  startTime?: string; // ISO String
+  finishTime?: string; // ISO String
 }
 
 interface Checkpoint {
@@ -45,11 +48,23 @@ interface ToastNotification {
   type: 'info' | 'success' | 'warning' | 'danger';
 }
 
+interface EventState {
+  isRunning: boolean;
+  startTime: string | null;
+  endTime: string | null;
+}
+
 // --- Mock Data Generator (Mutable for CRUD simulation) ---
+let GLOBAL_EVENT_STATE: EventState = {
+  isRunning: false,
+  startTime: null,
+  endTime: null
+};
+
 let GLOBAL_TEAMS_DB: Team[] = [
-  { id: 't1', name: 'Lobo Guará', username: 'team1', password: '123', status: 'online', mode: 'activity', location: { lat: 38.7223, lng: -9.1393, timestamp: new Date().toISOString() }, batteryLevel: 85 },
-  { id: 't2', name: 'Águia Real', username: 'team2', password: '123', status: 'offline', mode: 'tracking_only', location: { lat: 38.7240, lng: -9.1420, timestamp: new Date().toISOString() }, batteryLevel: 42 },
-  { id: 't3', name: 'Raposa Astuta', username: 'team3', password: '123', status: 'sos', mode: 'activity', location: { lat: 38.7210, lng: -9.1350, timestamp: new Date().toISOString() }, batteryLevel: 15 },
+  { id: 't1', name: 'Lobo Guará', username: 'team1', password: '123', status: 'online', mode: 'activity', location: { lat: 38.7223, lng: -9.1393, timestamp: new Date().toISOString() }, history: [], batteryLevel: 85 },
+  { id: 't2', name: 'Águia Real', username: 'team2', password: '123', status: 'offline', mode: 'tracking_only', location: { lat: 38.7240, lng: -9.1420, timestamp: new Date().toISOString() }, history: [], batteryLevel: 42 },
+  { id: 't3', name: 'Raposa Astuta', username: 'team3', password: '123', status: 'sos', mode: 'activity', location: { lat: 38.7210, lng: -9.1350, timestamp: new Date().toISOString() }, history: [], batteryLevel: 15 },
 ];
 
 let GLOBAL_ADMINS_DB: Admin[] = [
@@ -122,8 +137,13 @@ const playAlertSound = () => {
 
 // --- Mock Firestore Service ---
 // Modified to read from GLOBAL_TEAMS_DB so CRUD operations persist during simulation
-const useTeamsStream = () => {
+const useTeamsStream = (updateTrigger: number) => {
   const [teams, setTeams] = useState<Team[]>(GLOBAL_TEAMS_DB);
+
+  // Immediate update when trigger changes (e.g., after CRUD)
+  useEffect(() => {
+      setTeams([...GLOBAL_TEAMS_DB]);
+  }, [updateTrigger]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -135,8 +155,12 @@ const useTeamsStream = () => {
         const moveLat = (Math.random() - 0.5) * 0.0005;
         const moveLng = (Math.random() - 0.5) * 0.0005;
         
+        // Update History
+        const newHistory = [...(team.history || []), team.location].slice(-50); // Keep last 50 points to simulate recent path
+
         return {
           ...team,
+          history: newHistory,
           location: {
             ...team.location,
             lat: team.location.lat + moveLat,
@@ -331,20 +355,66 @@ const FlutterCodeModal = ({ onClose }: { onClose: () => void }) => (
   </div>
 );
 
-const TeamListItem: React.FC<{ team: Team, onEdit: () => void }> = ({ team, onEdit }) => {
+// --- Timer Display Component ---
+const LiveTimer = ({ startDate, endDate }: { startDate?: string, endDate?: string }) => {
+  const [duration, setDuration] = useState('00:00:00');
+
+  useEffect(() => {
+    const update = () => {
+        if (!startDate) {
+            setDuration('00:00:00');
+            return;
+        }
+        
+        const start = new Date(startDate).getTime();
+        const end = endDate ? new Date(endDate).getTime() : Date.now();
+        const diff = Math.max(0, end - start);
+        
+        const seconds = Math.floor((diff / 1000) % 60);
+        const minutes = Math.floor((diff / (1000 * 60)) % 60);
+        const hours = Math.floor((diff / (1000 * 60 * 60)));
+
+        setDuration(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+    };
+
+    update();
+    
+    // If there is an end date, we don't need to keep updating the interval
+    if (endDate) return;
+
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [startDate, endDate]);
+
+  return <span style={{ fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums' }}>{duration}</span>;
+};
+
+const TeamListItem: React.FC<{ 
+    team: Team, 
+    onEdit: () => void,
+    onStart: (id: string) => void,
+    onStop: (id: string) => void,
+    onToggleHistory: (id: string) => void,
+    isViewingHistory: boolean
+}> = ({ team, onEdit, onStart, onStop, onToggleHistory, isViewingHistory }) => {
   let statusColor = '#9CA3AF'; // gray
   if (team.status === 'online') statusColor = '#10B981'; // green
   if (team.status === 'sos') statusColor = '#EF4444'; // red
+
+  const hasStarted = !!team.startTime;
+  const hasFinished = !!team.finishTime;
 
   return (
     <div 
       style={{
         padding: '16px', borderBottom: '1px solid #f3f4f6', cursor: 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        backgroundColor: 'white', transition: 'background-color 0.2s'
+        backgroundColor: isViewingHistory ? '#F0F9FF' : 'white', 
+        borderLeft: isViewingHistory ? '4px solid #0EA5E9' : '4px solid transparent',
+        transition: 'background-color 0.2s'
       }}
-      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
-      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isViewingHistory ? '#F0F9FF' : '#f9fafb'}
+      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isViewingHistory ? '#F0F9FF' : 'white'}
     >
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1 }}>
          <div style={{ 
@@ -359,15 +429,78 @@ const TeamListItem: React.FC<{ team: Team, onEdit: () => void }> = ({ team, onEd
             <div style={{ fontSize: '12px', color: '#6B7280', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: statusColor }} />
               <span style={{ textTransform: 'uppercase', fontWeight: 500 }}>{team.status}</span> 
-              <span>•</span>
-              <span style={{ color: team.mode === 'activity' ? '#059669' : '#6B7280' }}>
-                {team.mode === 'activity' ? 'Modo Atividade' : 'Rastreio'}
-              </span>
+              
+              {/* Timer Status for Team */}
+              {hasStarted && (
+                  <>
+                     <span>•</span>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: hasFinished ? '#059669' : '#2563EB', fontWeight: 600 }}>
+                        <Clock size={12} />
+                        <LiveTimer startDate={team.startTime} endDate={team.finishTime} />
+                     </div>
+                  </>
+              )}
             </div>
          </div>
       </div>
       
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+         {/* History Toggle */}
+         <button 
+           onClick={(e) => { e.stopPropagation(); onToggleHistory(team.id); }}
+           title="Ver Rota no Mapa"
+           style={{
+             padding: '8px', borderRadius: '50%', border: 'none', 
+             backgroundColor: isViewingHistory ? '#E0F2FE' : 'transparent',
+             cursor: 'pointer', 
+             color: isViewingHistory ? '#0284C7' : '#6B7280', 
+             transition: 'all 0.2s'
+           }}
+           onMouseEnter={(e) => { 
+             if (!isViewingHistory) {
+                e.currentTarget.style.backgroundColor = '#F3F4F6'; e.currentTarget.style.color = '#111827';
+             }
+           }}
+           onMouseLeave={(e) => { 
+             if (!isViewingHistory) {
+               e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#6B7280'; 
+             }
+           }}
+         >
+           <Route size={16} />
+         </button>
+
+         {/* Timer Controls */}
+         {!hasStarted ? (
+            <button 
+                onClick={(e) => { e.stopPropagation(); onStart(team.id); }}
+                title="Iniciar Tempo da Equipa"
+                style={{
+                    padding: '8px', borderRadius: '50%', border: 'none', backgroundColor: '#EFF6FF',
+                    cursor: 'pointer', color: '#2563EB', transition: 'all 0.2s',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+            >
+                <Play size={16} fill="currentColor" />
+            </button>
+         ) : !hasFinished ? (
+             <button 
+                onClick={(e) => { e.stopPropagation(); onStop(team.id); }}
+                title="Parar Tempo da Equipa"
+                style={{
+                    padding: '8px', borderRadius: '50%', border: 'none', backgroundColor: '#FEF2F2',
+                    cursor: 'pointer', color: '#EF4444', transition: 'all 0.2s',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+            >
+                <Square size={16} fill="currentColor" />
+            </button>
+         ) : (
+             <div style={{ fontSize: '10px', color: '#059669', fontWeight: 700, border: '1px solid #059669', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#ECFDF5' }}>
+                 FIM
+             </div>
+         )}
+
          {/* Edit Button */}
          <button 
            onClick={(e) => { e.stopPropagation(); onEdit(); }}
@@ -375,20 +508,11 @@ const TeamListItem: React.FC<{ team: Team, onEdit: () => void }> = ({ team, onEd
              padding: '8px', borderRadius: '50%', border: 'none', backgroundColor: 'transparent',
              cursor: 'pointer', color: '#6B7280', transition: 'all 0.2s'
            }}
-           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EFF6FF'; e.currentTarget.style.color = '#3B82F6'; }}
+           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F3F4F6'; e.currentTarget.style.color = '#111827'; }}
            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#6B7280'; }}
          >
            <Edit2 size={16} />
          </button>
-
-         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'end', fontSize: '12px', color: '#6B7280' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500, color: team.batteryLevel < 20 ? '#EF4444' : '#374151' }}>
-                <Battery size={14} /> {team.batteryLevel}%
-            </div>
-            <div style={{ marginTop: '4px', fontSize: '11px' }}>
-                {team.location.timestamp.substring(11, 16)}
-            </div>
-         </div>
       </div>
     </div>
   );
@@ -584,6 +708,14 @@ const TeamEditor = ({
     onSave(formData as Team);
   };
 
+  const handleDelete = () => {
+    if (confirm('Tem a certeza que deseja eliminar esta equipa? Esta ação não pode ser desfeita.')) {
+      if (onDelete && formData.id) onDelete(formData.id);
+    }
+  };
+
+  const isFormValid = formData.name && formData.username && formData.password;
+
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -616,28 +748,33 @@ const TeamEditor = ({
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Username</label>
-                <input 
-                  type="text" 
-                  required
-                  value={formData.username || ''}
-                  onChange={e => setFormData({...formData, username: e.target.value})}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
-                  placeholder="team1"
-                />
+          <div style={{ padding: '16px', backgroundColor: '#F3F4F6', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#4B5563', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Lock size={12} /> CREDENCIAIS DE ACESSO
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Password</label>
-                <input 
-                  type="text" 
-                  required
-                  value={formData.password || ''}
-                  onChange={e => setFormData({...formData, password: e.target.value})}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
-                  placeholder="***"
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Username</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={formData.username || ''}
+                      onChange={e => setFormData({...formData, username: e.target.value})}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white' }}
+                      placeholder="team1"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Password</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={formData.password || ''}
+                      onChange={e => setFormData({...formData, password: e.target.value})}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white' }}
+                      placeholder="***"
+                    />
+                  </div>
               </div>
           </div>
 
@@ -648,9 +785,12 @@ const TeamEditor = ({
                onChange={e => setFormData({...formData, mode: e.target.value as any})}
                style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
              >
-               <option value="tracking_only">Apenas Rastreio</option>
-               <option value="activity">Modo Atividade (Jogos)</option>
+               <option value="tracking_only">Apenas Rastreio (GPS)</option>
+               <option value="activity">Modo Atividade (GPS + Jogos)</option>
              </select>
+             <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '4px' }}>
+                * No modo "Atividade", a equipa pode ver e responder a checkpoints.
+             </div>
           </div>
 
           {formData.id && (
@@ -672,7 +812,7 @@ const TeamEditor = ({
             {formData.id && onDelete && (
               <button 
                 type="button" 
-                onClick={() => onDelete(formData.id!)}
+                onClick={handleDelete}
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', color: '#EF4444', border: '1px solid #FECACA', borderRadius: '6px', background: '#FEF2F2', cursor: 'pointer' }}
               >
                 <Trash2 size={16} /> Eliminar
@@ -690,7 +830,14 @@ const TeamEditor = ({
               </button>
               <button 
                 type="submit"
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 24px', color: 'white', border: 'none', borderRadius: '6px', background: '#2563EB', cursor: 'pointer', fontWeight: 500 }}
+                disabled={!isFormValid}
+                style={{ 
+                   display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 24px', 
+                   color: 'white', border: 'none', borderRadius: '6px', 
+                   background: isFormValid ? '#2563EB' : '#93C5FD', 
+                   cursor: isFormValid ? 'pointer' : 'not-allowed', 
+                   fontWeight: 500 
+                }}
               >
                 <Save size={16} /> Guardar
               </button>
@@ -819,14 +966,16 @@ const MockMap = ({
   activeTab,
   onMapClick,
   onCheckpointClick,
-  editingCheckpoint
+  editingCheckpoint,
+  viewingHistoryTeamId
 }: { 
   teams: Team[], 
   checkpoints: Checkpoint[], 
   activeTab: 'teams' | 'checkpoints' | 'admins',
   onMapClick: (lat: number, lng: number) => void,
   onCheckpointClick: (cp: Checkpoint) => void,
-  editingCheckpoint: Partial<Checkpoint> | null
+  editingCheckpoint: Partial<Checkpoint> | null,
+  viewingHistoryTeamId: string | null
 }) => {
   // Center roughly on mock data
   const centerLat = 38.7223;
@@ -851,6 +1000,14 @@ const MockMap = ({
      onMapClick(lat, lng);
   };
 
+  const getPercentageCoordinates = (lat: number, lng: number) => {
+      const y = 50 + (centerLat - lat) * zoomScale;
+      const x = 50 + (lng - centerLng) * zoomScale;
+      return { x, y };
+  };
+
+  const historyTeam = teams.find(t => t.id === viewingHistoryTeamId);
+
   return (
     <div 
       onClick={handleContainerClick}
@@ -867,36 +1024,75 @@ const MockMap = ({
       {/* Fallback Grid if no API Key image */}
       <div style={{ position: 'absolute', inset: 0, opacity: 0.1, pointerEvents: 'none', backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
 
+      {/* Historical Path Layer */}
+      {viewingHistoryTeamId && historyTeam && (
+        <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 5 }}>
+            <polyline
+                points={[...historyTeam.history, historyTeam.location].map(loc => {
+                    const coords = getPercentageCoordinates(loc.lat, loc.lng);
+                    return `${coords.x}%,${coords.y}%`;
+                }).join(' ')}
+                fill="none"
+                stroke="#3B82F6"
+                strokeWidth="3"
+                strokeDasharray="5,5"
+                opacity="0.8"
+            />
+            {historyTeam.history.map((loc, i) => {
+                 const coords = getPercentageCoordinates(loc.lat, loc.lng);
+                 return (
+                    <circle 
+                        key={i} 
+                        cx={`${coords.x}%`} 
+                        cy={`${coords.y}%`} 
+                        r="3" 
+                        fill="#3B82F6" 
+                        opacity="0.6"
+                    />
+                 )
+            })}
+        </svg>
+      )}
+
       <div style={{ position: 'absolute', top: '20px', left: '20px', backgroundColor: 'rgba(255,255,255,0.95)', padding: '12px', borderRadius: '8px', fontSize: '12px', color: '#4b5563', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', maxWidth: '250px', zIndex: 100 }}>
         <p style={{ margin: '0 0 8px 0', fontWeight: 'bold', color: '#111' }}>
            {activeTab === 'teams' ? 'Monitorização em Tempo Real' : activeTab === 'admins' ? 'Gestão de Chefia' : 'Gestão de Checkpoints'}
         </p>
         <p style={{ margin: 0 }}>
            {activeTab === 'teams' 
-              ? 'Este mapa simula a atualização em tempo real via Firestore.' 
+              ? viewingHistoryTeamId ? `A visualizar histórico de: ${historyTeam?.name}` : 'Este mapa simula a atualização em tempo real via Firestore.' 
               : activeTab === 'admins' ? 'Modo de gestão administrativa. Mapa apenas para visualização.' : 'Clique no mapa para adicionar um novo Checkpoint. Clique num checkpoint para editar.'}
         </p>
+        {viewingHistoryTeamId && (
+            <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#EFF6FF', borderRadius: '4px', border: '1px solid #BFDBFE', color: '#1E40AF', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Route size={14} />
+                <span>Modo Histórico Ativo</span>
+            </div>
+        )}
       </div>
 
       {/* Render Teams */}
       {teams.map(team => {
-        const y = 50 + (centerLat - team.location.lat) * zoomScale;
-        const x = 50 + (team.location.lng - centerLng) * zoomScale;
+        const coords = getPercentageCoordinates(team.location.lat, team.location.lng);
         
         let pinColor = '#9CA3AF';
         if (team.status === 'online') pinColor = '#10B981';
         if (team.status === 'sos') pinColor = '#EF4444';
+        
+        // Dim other teams if viewing history
+        const isDimmed = viewingHistoryTeamId && viewingHistoryTeamId !== team.id;
 
         return (
           <div key={team.id} style={{
             position: 'absolute',
-            top: `calc(50% + ${y}%)`,
-            left: `calc(50% + ${x}%)`,
+            top: `calc(50% + ${coords.y}%)`,
+            left: `calc(50% + ${coords.x}%)`,
             transform: 'translate(-50%, -100%)', // Anchor at bottom center
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             transition: 'all 2s linear', // Smooth movement
             zIndex: 10,
-            pointerEvents: 'none' // Let clicks pass through to map in checkpoint mode
+            pointerEvents: 'none', // Let clicks pass through to map in checkpoint mode
+            opacity: isDimmed ? 0.3 : 1
           }}>
             <div style={{ 
               backgroundColor: 'white', padding: '2px 6px', borderRadius: '4px', 
@@ -922,8 +1118,7 @@ const MockMap = ({
 
       {/* Render Checkpoints */}
       {checkpoints.map(cp => {
-        const y = 50 + (centerLat - cp.location.lat) * zoomScale;
-        const x = 50 + (cp.location.lng - centerLng) * zoomScale;
+        const coords = getPercentageCoordinates(cp.location.lat, cp.location.lng);
         const isEditing = editingCheckpoint?.id === cp.id;
 
         return (
@@ -938,8 +1133,8 @@ const MockMap = ({
              title={cp.title}
              style={{
                position: 'absolute',
-               top: `calc(50% + ${y}%)`,
-               left: `calc(50% + ${x}%)`,
+               top: `calc(50% + ${coords.y}%)`,
+               left: `calc(50% + ${coords.x}%)`,
                transform: `translate(-50%, -100%) scale(${hoveredCpId === cp.id || isEditing ? 1.2 : 1})`,
                cursor: activeTab === 'checkpoints' ? 'pointer' : 'default',
                zIndex: hoveredCpId === cp.id || isEditing ? 30 : 20,
@@ -1016,7 +1211,8 @@ const MockMap = ({
 };
 
 const App = () => {
-  const teams = useTeamsStream();
+  const [dataVersion, setDataVersion] = useState(0);
+  const teams = useTeamsStream(dataVersion);
   const [showCode, setShowCode] = useState(false);
   
   // New State for Checkpoints
@@ -1026,6 +1222,7 @@ const App = () => {
 
   // New State for Team Management
   const [editingTeam, setEditingTeam] = useState<Partial<Team> | null>(null);
+  const [viewingHistoryTeamId, setViewingHistoryTeamId] = useState<string | null>(null);
 
   // New State for Admin Management
   const [admins, setAdmins] = useState<Admin[]>(GLOBAL_ADMINS_DB);
@@ -1034,6 +1231,9 @@ const App = () => {
   // New State for SOS Notifications
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
   const knownSosTeamsRef = useRef<Set<string>>(new Set());
+
+  // Global Timer State
+  const [eventState, setEventState] = useState<EventState>(GLOBAL_EVENT_STATE);
 
   // Monitor SOS Status
   useEffect(() => {
@@ -1116,13 +1316,49 @@ const App = () => {
         };
         GLOBAL_TEAMS_DB.push(newTeam);
     }
+    setDataVersion(v => v + 1); // Trigger immediate UI update
     setEditingTeam(null);
   };
 
   const deleteTeam = (id: string) => {
       GLOBAL_TEAMS_DB = GLOBAL_TEAMS_DB.filter(t => t.id !== id);
+      setDataVersion(v => v + 1); // Trigger immediate UI update
       setEditingTeam(null);
   };
+
+  const toggleTeamHistory = (id: string) => {
+      setViewingHistoryTeamId(prev => prev === id ? null : id);
+  };
+
+  // Team Timer Actions
+  const startTeamTimer = (id: string) => {
+      const index = GLOBAL_TEAMS_DB.findIndex(t => t.id === id);
+      if (index !== -1) {
+          GLOBAL_TEAMS_DB[index] = { ...GLOBAL_TEAMS_DB[index], startTime: new Date().toISOString() };
+          setDataVersion(v => v + 1);
+      }
+  };
+
+  const stopTeamTimer = (id: string) => {
+      const index = GLOBAL_TEAMS_DB.findIndex(t => t.id === id);
+      if (index !== -1) {
+          GLOBAL_TEAMS_DB[index] = { ...GLOBAL_TEAMS_DB[index], finishTime: new Date().toISOString() };
+          setDataVersion(v => v + 1);
+      }
+  };
+
+  // Global Timer Actions
+  const toggleGlobalTimer = () => {
+    if (eventState.isRunning) {
+        // Stop
+        GLOBAL_EVENT_STATE = { ...GLOBAL_EVENT_STATE, isRunning: false, endTime: new Date().toISOString() };
+    } else {
+        // Start (reset if new start)
+        GLOBAL_EVENT_STATE = { isRunning: true, startTime: new Date().toISOString(), endTime: null };
+    }
+    setEventState(GLOBAL_EVENT_STATE);
+  };
+
 
   // Admin Actions
   const saveAdmin = (admin: Admin) => {
@@ -1161,6 +1397,42 @@ const App = () => {
             ScoutTracker
           </h1>
           <div style={{ fontSize: '13px', color: '#9CA3AF', marginTop: '6px' }}>Plataforma de Chefia</div>
+          
+          {/* Global Timer Control */}
+          <div style={{ marginTop: '20px', padding: '12px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase' }}>Tempo de Prova</span>
+                {eventState.isRunning && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#EF4444', fontSize: '10px', fontWeight: 700 }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#EF4444', animation: 'pulse 1s infinite' }}></span> LIVE
+                    </span>
+                )}
+             </div>
+             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontSize: '20px', fontWeight: 'bold', fontFamily: 'monospace', color: 'white' }}>
+                    {eventState.startTime ? (
+                        <LiveTimer startDate={eventState.startTime} endDate={eventState.endTime || undefined} />
+                    ) : (
+                        '00:00:00'
+                    )}
+                </div>
+                <button 
+                  onClick={toggleGlobalTimer}
+                  style={{
+                      border: 'none', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer',
+                      backgroundColor: eventState.isRunning ? '#EF4444' : '#10B981',
+                      color: 'white', fontWeight: 600, fontSize: '12px',
+                      display: 'flex', alignItems: 'center', gap: '4px'
+                  }}
+                >
+                    {eventState.isRunning ? (
+                        <><Square size={12} fill="white" /> Parar</>
+                    ) : (
+                        <><Play size={12} fill="white" /> Iniciar</>
+                    )}
+                </button>
+             </div>
+          </div>
         </div>
 
         {/* Tab Switcher */}
@@ -1214,7 +1486,11 @@ const App = () => {
                 <TeamListItem 
                     key={team.id} 
                     team={team} 
-                    onEdit={() => setEditingTeam(team)} 
+                    onEdit={() => setEditingTeam(team)}
+                    onStart={startTeamTimer}
+                    onStop={stopTeamTimer}
+                    onToggleHistory={toggleTeamHistory}
+                    isViewingHistory={viewingHistoryTeamId === team.id}
                 />
               ))}
             </>
@@ -1346,6 +1622,7 @@ const App = () => {
            onMapClick={handleMapClick}
            onCheckpointClick={setEditingCheckpoint}
            editingCheckpoint={editingCheckpoint}
+           viewingHistoryTeamId={viewingHistoryTeamId}
         />
         
         {/* Overlay Stats - Only show in Teams mode */}
